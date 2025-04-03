@@ -11,10 +11,7 @@ import org.apache.spark.mllib.linalg.Vectors;
 import scala.Tuple2;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 public class G31HW1 {
     public static void main(String[] args) throws IOException {
@@ -31,10 +28,10 @@ public class G31HW1 {
 
         int L = Integer.parseInt(args[1]), K = Integer.parseInt(args[2]), M = Integer.parseInt(args[3]);
 
-        System.out.println("Input file = datasets/" + args[0] + ", L = " + args[1] + ", K = " + args[2] + ", M = " + args[3]);
+        System.out.println("Input file = " + args[0] + ", L = " + args[1] + ", K = " + args[2] + ", M = " + args[3]);
 
-        JavaRDD<String> rawPoints = sc.textFile(args[0]).repartition(L);
-        JavaPairRDD<Vector, String> U = rawPoints
+        JavaRDD<String> inputPoints = sc.textFile(args[0]).repartition(L);
+        JavaPairRDD<Vector, String> U = inputPoints
                 .mapToPair((point) -> {
                     String[] data = point.split(",");
                     double x = Double.parseDouble(data[0]);
@@ -47,11 +44,11 @@ public class G31HW1 {
         long NB = U.filter((point) -> point._2().equals("B")).count();
         System.out.println("N = " + U.count() + ", NA = " + NA + ", NB = " + NB);
 
-        KMeansModel clusters = KMeans.train(U.map(Tuple2::_1).rdd(), K, M);
+        KMeansModel clusters = KMeans.train(U.map(Tuple2::_1).rdd(), K, M, "kmeans||", 1);
         Vector[] C = clusters.clusterCenters();
 
-        System.out.println("Delta(U,C) = " + MRComputeStandardObjective(U, C));
-        System.out.println("Phi(A,B,C) = " + MRComputeFairObjective(U, C));
+        System.out.format("Delta(U,C) = %.6f%n", MRComputeStandardObjective(U, C));
+        System.out.format("Phi(A,B,C) = %.6f%n", MRComputeFairObjective(U, C));
 
         MRPrintStatistics(U, C);
     }
@@ -170,12 +167,16 @@ public class G31HW1 {
             return centerGroupSum;
         });
 
+        Map<Integer, HashMap<String, Long>> centersCount = result.collectAsMap();
 
-        result.foreach((center) -> {
-            int i = center._1();
-            long NAi = center._2().get("A");
-            long NBi = center._2().get("B");
-            System.out.println("i = " + i + ", center = (" + C[i].toString() + "), NA" + i + " = " + NAi + ", NB" + i + " = " + NBi);
-        });
+        for (int i = 0; i < C.length; i++) {
+            HashMap<String, Long> counts = centersCount.get(i);
+            long NAi = counts.get("A");
+            long NBi = counts.get("B");
+            double[] centerCoordinates = C[i].toArray();
+
+            System.out.format("i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d%n",
+                    i, centerCoordinates[0], centerCoordinates[1], i, NAi, i, NBi);
+        }
     }
 }
