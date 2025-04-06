@@ -90,8 +90,10 @@ public class G31HW1 {
     }
 
     static Double MRComputeFairObjective(JavaPairRDD<Vector, String> U, Vector[] C) {
-        long groupACardinality = U.filter((point) -> point._2().equals("A")).count();
-        long groupBCardinality = U.filter((point) -> point._2().equals("B")).count();
+        HashMap<String, Long> cardinalities = new HashMap<>();
+        cardinalities.put("A", U.filter((point) -> point._2().equals("A")).count());
+        cardinalities.put("B", U.filter((point) -> point._2().equals("B")).count());
+
         return U
                 .mapToPair((element) -> {
                     double closestDistance = Vectors.sqdist(element._1(), C[0]);
@@ -117,7 +119,7 @@ public class G31HW1 {
                 })
                 .groupByKey()
                 .mapToPair((element) -> {
-                    double cardinality = element._1().equals("A") ? groupACardinality : groupBCardinality;
+                    double cardinality = cardinalities.get(element._1());
                     Iterator<Double> it = element._2().iterator();
                     double totalSum = 0.0;
                     while (it.hasNext()) {
@@ -126,7 +128,7 @@ public class G31HW1 {
                     }
                     return new Tuple2<>(0, totalSum / cardinality);
                 })
-                .reduceByKey(Math::max) // REDUCE PHASE R3
+                .reduceByKey(Math::max)
                 .values()
                 .first();
     }
