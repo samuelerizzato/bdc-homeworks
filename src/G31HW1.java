@@ -134,7 +134,7 @@ public class G31HW1 {
     }
 
     static void MRPrintStatistics(JavaPairRDD<Vector, String> U, Vector[] C) {
-        JavaPairRDD<Integer, HashMap<String, Long>> result = U.mapToPair((element) -> {
+        Map<Integer, HashMap<String, Long>> centerCounts = U.mapToPair((element) -> {
             double closestDistance = Vectors.sqdist(element._1(), C[0]);
             int closestCenterIndex = 0;
             for (int i = 1; i < C.length; i++) {
@@ -167,12 +167,10 @@ public class G31HW1 {
                 centerGroupSum.put(e.getKey(), e.getValue() + centerGroupSum.getOrDefault(e.getKey(), 0L));
             }
             return centerGroupSum;
-        });
-
-        Map<Integer, HashMap<String, Long>> centersCount = result.collectAsMap();
+        }).collectAsMap();
 
         for (int i = 0; i < C.length; i++) {
-            HashMap<String, Long> counts = centersCount.get(i);
+            HashMap<String, Long> counts = centerCounts.get(i);
             long NAi = counts.get("A");
             long NBi = counts.get("B");
             double[] centerCoordinates = C[i].toArray();
