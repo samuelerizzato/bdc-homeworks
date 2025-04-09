@@ -40,11 +40,11 @@ public class G31HW1 {
                 })
                 .cache();
 
-        long NA = U.filter((point) -> point._2().equals("A")).count();
-        long NB = U.filter((point) -> point._2().equals("B")).count();
+        long NA = U.filter((pointPair) -> pointPair._2().equals("A")).count();
+        long NB = U.filter((pointPair) -> pointPair._2().equals("B")).count();
         System.out.println("N = " + U.count() + ", NA = " + NA + ", NB = " + NB);
 
-        KMeansModel clusters = KMeans.train(U.map(Tuple2::_1).rdd(), K, M, "kmeans||", 1);
+        KMeansModel clusters = KMeans.train(U.keys().rdd(), K, M, "kmeans||", 1);
         Vector[] C = clusters.clusterCenters();
 
         System.out.format("Delta(U,C) = %.6f%n", MRComputeStandardObjective(U, C));
@@ -134,49 +134,45 @@ public class G31HW1 {
     }
 
     static void MRPrintStatistics(JavaPairRDD<Vector, String> U, Vector[] C) {
-        Map<Integer, HashMap<String, Long>> centerCounts = U.mapToPair((element) -> {
-            double closestDistance = Vectors.sqdist(element._1(), C[0]);
-            int closestCenterIndex = 0;
-            for (int i = 1; i < C.length; i++) {
-                double distance = Vectors.sqdist(element._1(), C[i]);
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                    closestCenterIndex = i;
-                }
-            }
-            return new Tuple2<>(closestCenterIndex, element._2());
-        }).mapPartitionsToPair((element) -> {
-            HashMap<Integer, HashMap<String, Long>> centerStats = new HashMap<>();
-            while (element.hasNext()) {
-                Tuple2<Integer, String> tuple = element.next();
-                centerStats.computeIfAbsent(tuple._1(), k -> new HashMap<>());
-                HashMap<String, Long> groupCenters = centerStats.get(tuple._1());
-                groupCenters.put(tuple._2(), 1L + groupCenters.getOrDefault(tuple._2(), 0L));
-            }
-            ArrayList<Tuple2<Integer, HashMap<String, Long>>> pairs = new ArrayList<>();
-            for (Map.Entry<Integer, HashMap<String, Long>> e : centerStats.entrySet()) {
-                pairs.add(new Tuple2<>(e.getKey(), e.getValue()));
-            }
-            return pairs.iterator();
-        }).reduceByKey((center1, center2) -> {
-            HashMap<String, Long> centerGroupSum = new HashMap<>();
-            for (Map.Entry<String, Long> e : center1.entrySet()) {
-                centerGroupSum.put(e.getKey(), e.getValue() + centerGroupSum.getOrDefault(e.getKey(), 0L));
-            }
-            for (Map.Entry<String, Long> e : center2.entrySet()) {
-                centerGroupSum.put(e.getKey(), e.getValue() + centerGroupSum.getOrDefault(e.getKey(), 0L));
-            }
-            return centerGroupSum;
-        }).collectAsMap();
+        Map<Integer, Tuple2<Long, Long>> centerCounts = U
+                .mapToPair((element) -> {
+                    double closestDistance = Vectors.sqdist(element._1(), C[0]);
+                    int closestCenterIndex = 0;
+                    for (int i = 1; i < C.length; i++) {
+                        double distance = Vectors.sqdist(element._1(), C[i]);
+                        if (distance < closestDistance) {
+                            closestDistance = distance;
+                            closestCenterIndex = i;
+                        }
+                    }
+                    if (element._2().equals("A")) {
+                        return new Tuple2<>(closestCenterIndex, new Tuple2<>(1L, 0L));
+                    }
+                    return new Tuple2<>(closestCenterIndex, new Tuple2<>(0L, 1L));
+                })
+                .mapPartitionsToPair((element) -> {
+                    HashMap<Integer, Tuple2<Long, Long>> centerStats = new HashMap<>();
+                    while (element.hasNext()) {
+                        Tuple2<Integer, Tuple2<Long, Long>> tuple = element.next();
+                        Tuple2<Long, Long> currentVal = centerStats.getOrDefault(tuple._1(), new Tuple2<>(0L, 0L));
+                        Tuple2<Long, Long> sum = new Tuple2<>(tuple._2()._1() + currentVal._1(), tuple._2()._2() + currentVal._1());
+                        centerStats.put(tuple._1(), sum);
+                    }
+                    ArrayList<Tuple2<Integer, Tuple2<Long, Long>>> pairs = new ArrayList<>();
+                    for (Map.Entry<Integer, Tuple2<Long, Long>> e : centerStats.entrySet()) {
+                        pairs.add(new Tuple2<>(e.getKey(), e.getValue()));
+                    }
+                    return pairs.iterator();
+                })
+                .reduceByKey((center1, center2) -> new Tuple2<>(center1._1() + center2._1(), center1._2() + center2._2()))
+                .collectAsMap();
 
         for (int i = 0; i < C.length; i++) {
-            HashMap<String, Long> counts = centerCounts.get(i);
-            long NAi = counts.get("A");
-            long NBi = counts.get("B");
+            Tuple2<Long, Long> counts = centerCounts.get(i);
             double[] centerCoordinates = C[i].toArray();
 
             System.out.format("i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d%n",
-                    i, centerCoordinates[0], centerCoordinates[1], i, NAi, i, NBi);
+                    i, centerCoordinates[0], centerCoordinates[1], i, counts._1(), i, counts._2());
         }
     }
 }
