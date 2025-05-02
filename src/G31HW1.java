@@ -34,9 +34,11 @@ public class G31HW1 {
         JavaPairRDD<Vector, String> U = inputPoints
                 .mapToPair((point) -> {
                     String[] data = point.split(",");
-                    double x = Double.parseDouble(data[0]);
-                    double y = Double.parseDouble(data[1]);
-                    return new Tuple2<>(Vectors.dense(x, y), data[2]);
+                    double[] coordinates = new double[data.length - 1];
+                    for (int i = 0; i < data.length - 1; i++) {
+                        coordinates[i] = Double.parseDouble(data[i]);
+                    }
+                    return new Tuple2<>(Vectors.dense(coordinates), data[data.length - 1]);
                 })
                 .cache();
 
@@ -155,7 +157,7 @@ public class G31HW1 {
                     while (element.hasNext()) {
                         Tuple2<Integer, Tuple2<Long, Long>> tuple = element.next();
                         Tuple2<Long, Long> currentVal = centerStats.getOrDefault(tuple._1(), new Tuple2<>(0L, 0L));
-                        Tuple2<Long, Long> sum = new Tuple2<>(tuple._2()._1() + currentVal._1(), tuple._2()._2() + currentVal._1());
+                        Tuple2<Long, Long> sum = new Tuple2<>(tuple._2()._1() + currentVal._1(), tuple._2()._2() + currentVal._2());
                         centerStats.put(tuple._1(), sum);
                     }
                     ArrayList<Tuple2<Integer, Tuple2<Long, Long>>> pairs = new ArrayList<>();
@@ -169,10 +171,13 @@ public class G31HW1 {
 
         for (int i = 0; i < C.length; i++) {
             Tuple2<Long, Long> counts = centerCounts.get(i);
-            double[] centerCoordinates = C[i].toArray();
 
-            System.out.format("i = %d, center = (%.6f,%.6f), NA%d = %d, NB%d = %d%n",
-                    i, centerCoordinates[0], centerCoordinates[1], i, counts._1(), i, counts._2());
+            System.out.format("i = %d, center = (", i);
+            for (int j = 0; j < C[i].size() - 1; j++) {
+                System.out.format("%.6f,", C[i].apply(j));
+            }
+            System.out.format("%.6f), NA%d = %d, NB%d = %d%n",
+                    C[i].apply(C[i].size() - 1), i, counts._1(), i, counts._2());
         }
     }
 }
