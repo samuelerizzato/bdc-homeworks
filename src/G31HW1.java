@@ -170,14 +170,16 @@ public class G31HW1 {
                 .collectAsMap();
 
         for (int i = 0; i < C.length; i++) {
+            StringBuilder centerFormat = new StringBuilder();
+            for (int j = 0; j < C[i].size() - 1; j++) {
+                centerFormat.append(String.format("%.6f,", C[i].apply(j)));
+            }
+            centerFormat.append(String.format("%.6f", C[i].apply(C[i].size() - 1)));
+
             Tuple2<Long, Long> counts = centerCounts.get(i);
 
-            System.out.format("i = %d, center = (", i);
-            for (int j = 0; j < C[i].size() - 1; j++) {
-                System.out.format("%.6f,", C[i].apply(j));
-            }
-            System.out.format("%.6f), NA%d = %d, NB%d = %d%n",
-                    C[i].apply(C[i].size() - 1), i, counts._1(), i, counts._2());
+            System.out.format("i = %d, center = (%s), NA%d = %d, NB%d = %d%n",
+                    i, centerFormat, i, counts._1(), i, counts._2());
         }
     }
 }
