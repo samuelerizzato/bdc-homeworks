@@ -16,7 +16,7 @@ public class G31GEN {
 
     static void generatePoints(int N, int K) {
         int clusterPoints = N / K;
-        int NA = (int)(0.8 * clusterPoints);
+        int NA = (int) (0.8 * clusterPoints);
         int NB = clusterPoints - NA;
         double[][] pointsA = new double[NA*K][2];
         double[][] pointsB = new double[NB*K][2];
@@ -25,17 +25,19 @@ public class G31GEN {
         double yA = 60.0;
         double yB = 20.0;
 
+        double rangeLimit = 10.0;
+
         for (int i = 0; i < K; i++) {
 
             for (int j = 0; j < NA; j++) {
-                double x = generateRandomNumber(xCenter - 10.0, xCenter + 10.0);
-                double y = generateRandomNumber(yA - 10.0, yA + 10.0);
+                double x = generateRandomDouble(xCenter - rangeLimit, xCenter + rangeLimit);
+                double y = generateRandomDouble(yA - rangeLimit, yA + rangeLimit);
                 pointsA[j + i*NA] = new double[]{x, y};
             }
 
             for (int j = 0; j < NB; j++) {
-                double x = generateRandomNumber(xCenter - 10.0, xCenter + 10.0);
-                double y = generateRandomNumber(yB - 10.0, yB + 10.0);
+                double x = generateRandomDouble(xCenter - 10.0, xCenter + 10.0);
+                double y = generateRandomDouble(yB - 10.0, yB + 10.0);
                 pointsB[j + i*NB] = new double[]{x, y};
             }
 
@@ -59,5 +61,5 @@ public class G31GEN {
         }
     }
 
-    static double generateRandomNumber(double min, double max) {  return min + (Math.random() * (max - min)); }
+    static double generateRandomDouble(double min, double max) {  return min + (Math.random() * (max - min)); }
 }
