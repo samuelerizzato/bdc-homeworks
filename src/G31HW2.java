@@ -13,6 +13,9 @@ import java.io.IOException;
 import java.util.*;
 
 public class G31HW2 {
+    static double NA;
+    static double NB;
+
     public static void main(String[] args) throws IOException {
         if (args.length != 4) {
             throw new IllegalArgumentException("USAGE: file_path num_partitions num_clusters num_iterations");
@@ -42,9 +45,9 @@ public class G31HW2 {
                 })
                 .cache();
 
-        long NA = inputPoints.filter((pointPair) -> pointPair._2().equals("A")).count();
-        long NB = inputPoints.filter((pointPair) -> pointPair._2().equals("B")).count();
-        System.out.println("N = " + inputPoints.count() + ", NA = " + NA + ", NB = " + NB);
+        NA = inputPoints.filter((pointPair) -> pointPair._2().equals("A")).count();
+        NB = inputPoints.filter((pointPair) -> pointPair._2().equals("B")).count();
+        System.out.println("N = " + inputPoints.count() + ", NA = " + (long)NA + ", NB = " + (long)NB);
 
         long start = System.currentTimeMillis();
         KMeansModel model = KMeans.train(inputPoints.keys().rdd(), K, M, "kmeans||", 1);
@@ -82,9 +85,6 @@ public class G31HW2 {
         KMeansModel model = KMeans.train(inputPoints.keys().rdd(), K, 0, "kmeans||", 1);
         Vector[] C = model.clusterCenters();
 
-        double NA = inputPoints.filter((pointPair) -> pointPair._2().equals("A")).count();
-        double NB = inputPoints.filter((pointPair) -> pointPair._2().equals("B")).count();
-
         for (int it = 0; it < M; it++) {
             Vector[] finalC = C;
             JavaPairRDD<Integer, Tuple2<Vector, String>> clusters = inputPoints.mapToPair(pointPair -> {
@@ -98,20 +98,21 @@ public class G31HW2 {
                     }
                 }
                 return new Tuple2<>(closestCenterIndex, pointPair);
-            });
+            }).cache();
 
-            C = runCentroidSelection(clusters, C, NA, NB, K);
+            C = runCentroidSelection(clusters, C, K);
         }
 
         return C;
     }
 
-    static Vector[] runCentroidSelection(JavaPairRDD<Integer, Tuple2<Vector, String>> clusters, Vector[] C, double NA, double NB, int K) {
+    static Vector[] runCentroidSelection(JavaPairRDD<Integer, Tuple2<Vector, String>> clusters, Vector[] C, int K) {
         Vector[] fairC = new Vector[C.length];
 
         Map<Integer, Tuple2<Long, Long>> centerCounts = clusters
                 .mapToPair(pointPair -> {
-                    Tuple2<Long, Long> pointUnit = pointPair._2()._2().equals("A") ? new Tuple2<>(1L, 0L) : new Tuple2<>(0L, 1L);
+                    String group = pointPair._2()._2();
+                    Tuple2<Long, Long> pointUnit = group.equals("A") ? new Tuple2<>(1L, 0L) : new Tuple2<>(0L, 1L);
                     return new Tuple2<>(pointPair._1(), pointUnit);
                 })
                 .mapPartitionsToPair(partition -> {
@@ -136,11 +137,12 @@ public class G31HW2 {
             for (int k = 0; k < K; k++) {
                 if (!centerCounts.containsKey(k)) {
                     int finalK = k;
-                    JavaPairRDD<Double, Tuple2<Integer, Tuple2<Vector, String>>> distances = clusters.mapToPair(pointPair -> {
-                        double distance = Vectors.sqdist(pointPair._2()._1(), C[finalK]);
-                        return new Tuple2<>(distance, pointPair);
-                    });
-                    Tuple2<Integer, Tuple2<Vector, String>> minDistance = distances
+
+                    Tuple2<Integer, Tuple2<Vector, String>> minDistance = clusters
+                            .mapToPair(pointPair -> {
+                                double distance = Vectors.sqdist(pointPair._2()._1(), C[finalK]);
+                                return new Tuple2<>(distance, pointPair);
+                            })
                             .mapPartitionsToPair(partition -> {
                                 if (partition.hasNext()) {
                                     Tuple2<Double, Tuple2<Integer, Tuple2<Vector, String>>> minPointDistance = partition.next();
@@ -160,15 +162,8 @@ public class G31HW2 {
                             .values()
                             .first()._2();
 
-                    clusters = distances.mapToPair(pair -> {
-                        Tuple2<Integer, Tuple2<Vector, String>> p;
-                        if (pair._2().equals(minDistance)) {
-                            p = new Tuple2<>(finalK, pair._2()._2());
-                        } else {
-                            p = pair._2();
-                        }
-                        return p;
-                    });
+                    clusters = clusters.mapToPair(pair ->
+                            pair.equals(minDistance) ? new Tuple2<>(finalK, pair._2()) : pair);
 
                 }
             }
@@ -198,14 +193,6 @@ public class G31HW2 {
                 .reduceByKey((c1, c2) -> new Tuple2<>(sumVectors(c1._1(), c2._1()), sumVectors(c1._2(), c2._2())))
                 .collectAsMap();
 
-        Tuple2<Vector, Vector> totalSums = clusterSums.get(0);
-        for (int i = 1; i < clusterSums.size(); i++) {
-            Tuple2<Vector, Vector> sums = clusterSums.get(i);
-            Vector sumA = sumVectors(sums._1(), totalSums._1());
-            Vector sumB = sumVectors(sums._2(), totalSums._2());
-            totalSums = new Tuple2<>(sumA, sumB);
-        }
-
         double[] alpha = new double[K];
         double[] beta = new double[K];
         double[] ell = new double[K];
@@ -218,21 +205,14 @@ public class G31HW2 {
             alpha[j] = counts._1() / NA;
             beta[j] = counts._2() / NB;
 
-            Vector aCentroid = counts._1() > 0 ? divideVector(sums._1(), counts._1()) : null;
-            Vector bCentroid = counts._2() > 0 ? divideVector(sums._2(), counts._2()) : null;
-
-            if (aCentroid == null) {
-                aCentroid = bCentroid;
-            }
-
-            if (bCentroid == null) {
-                bCentroid = aCentroid;
-            }
+            Vector other = counts._1() > 0L ? divideVector(sums._1(), counts._1()) : divideVector(sums._2(), counts._2());
+            Vector aCentroid = counts._1() > 0L ? divideVector(sums._1(), counts._1()) : other;
+            Vector bCentroid = counts._2() > 0L ? divideVector(sums._2(), counts._2()) : other;
 
             aStdCentroids[j] = aCentroid;
             bStdCentroids[j] = bCentroid;
 
-            ell[j] = Math.sqrt(Vectors.sqdist(aStdCentroids[j], bStdCentroids[j]));
+            ell[j] = Math.sqrt(Vectors.sqdist(aCentroid, bCentroid));
         }
 
         Map<String, Double> groupCosts = clusters
